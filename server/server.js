@@ -139,37 +139,54 @@ function withTimeout(promise, ms) {
 const scrapeNaverPlace = async (url) => {
   let browser = null;
   try {
-    console.log("[naver] launch");
+    console.log("[naver] launch start");
+
     browser = await chromium.launch({
       headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage", // Memory optimization
+        "--disable-dev-shm-usage",
         "--disable-gpu",
       ],
     });
+
     console.log("[naver] launched");
 
-    const page = await browser.newPage();
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      locale: "ko-KR",
+      timezoneId: "Asia/Seoul",
+      viewport: { width: 1280, height: 800 },
+    });
 
-    // Block heavy resources (images/fonts/media)
+    const page = await context.newPage();
+
+    // 🔥 리소스 차단 (속도 + 안정성)
     await page.route("**/*", (route) => {
       const type = route.request().resourceType();
-      if (type === "image" || type === "font" || type === "media") {
+      if (["image", "font", "media"].includes(type)) {
         return route.abort();
       }
       return route.continue();
     });
 
-    console.log("[naver] goto start");
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    console.log("[naver] goto start", url);
+
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 45000,
+    });
+
     console.log("[naver] goto done");
 
+    // --- 안전한 selector 대기 (없어도 진행되게) ---
     try {
-      // (선택) 페이지 구조에 따라 없어도 진행되게
       await page.waitForSelector("#_title", { timeout: 5000 });
     } catch (e) {}
+
+    console.log("[naver] extract start");
 
     const placeName = await page
       .locator("#_title span.Fc1rA")
@@ -195,7 +212,6 @@ const scrapeNaverPlace = async (url) => {
 
     let receiptReviewCount = 0;
     let blogReviewCount = 0;
-
     try {
       const reviewText = await page.locator(".PXMot").allInnerTexts();
       for (const txt of reviewText) {
@@ -212,7 +228,6 @@ const scrapeNaverPlace = async (url) => {
     try {
       const menuItems = page.locator(".E2jtL");
       menuCount = await menuItems.count();
-
       for (let i = 0; i < menuCount; i++) {
         const item = menuItems.nth(i);
         const desc = await item.locator(".kPogF").innerText().catch(() => "");
@@ -227,10 +242,13 @@ const scrapeNaverPlace = async (url) => {
       }
     } catch (e) {}
 
-    const fullText = (placeName + " " + storeInfoText + " " + directionsText).substring(
-      0,
-      5000
-    );
+    const fullText = (
+      placeName +
+      " " +
+      storeInfoText +
+      " " +
+      directionsText
+    ).substring(0, 5000);
 
     console.log("[naver] extract done");
 
@@ -246,12 +264,16 @@ const scrapeNaverPlace = async (url) => {
       fullText,
     };
   } catch (e) {
-    console.error("Playwright Error:", e);
+    console.error("[naver] Playwright Error:", e);
     throw new Error("SCRAPE_FAILED");
   } finally {
-    if (browser) await browser.close();
+    if (browser) {
+      await browser.close();
+      console.log("[naver] browser closed");
+    }
   }
 };
+
 
 const calculateNaverScore = (data) => {
   let score = 0;
@@ -588,18 +610,6 @@ app.post("/api/diagnosis/naver-place", naverPlaceLimiter, async (req, res) => {
   }
 });
 
-// --- Runtime Config Injection ---
-app.get("/runtime-config.js", (req, res) => {
-  res.type("application/javascript");
-  const apiUrl = process.env.API_URL || "";
-  res.setHeader("Cache-Control", "no-store");
-  res.send(`window.__RUNTIME_CONFIG__ = { API_BASE_URL: "${apiUrl}" };`);
-});
-
-// ✅ Health check 추가 (반드시 static/fallback 보다 위)
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true });
-});
 // ✅ Health check 추가 (반드시 static/fallback 보다 위)
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
@@ -629,6 +639,14 @@ app.post("/api/orders", (req, res) => {
 
 // --- Serve Static Frontend Files ---
 // ✅ API 라우트 다 등록한 다음에 static!
+// --- Runtime Config Injection ---
+app.get("/runtime-config.js", (req, res) => {
+  res.type("application/javascript");
+  const apiUrl = process.env.API_URL || "";
+  res.setHeader("Cache-Control", "no-store");
+  res.send(`window.__RUNTIME_CONFIG__ = { API_BASE_URL: "${apiUrl}" };`);
+});
+
 app.use(express.static(path.join(__dirname, "../dist")));
 
 // --- SPA Fallback ---
