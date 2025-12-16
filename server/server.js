@@ -82,12 +82,38 @@ const extractKeywords = (text) => {
   };
 };
 
-const resolveNaverUrl = async (shortUrl) => {
+/**
+ * ✅ naver.me / map.naver.com 어떤 형태든
+ * placeId 뽑아서 네가 원하는 정본 URL로 통일:
+ * https://map.naver.com/p/entry/place/{placeId}
+ */
+const resolveNaverPlaceUrl = async (inputUrl) => {
   try {
-    const r = await axios.get(shortUrl, { maxRedirects: 5 });
-    return r.request.res.responseUrl || shortUrl;
-  } catch {
-    return shortUrl;
+    const res = await axios.get(inputUrl, {
+      maxRedirects: 10,
+      validateStatus: (s) => s < 400,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+      },
+      timeout: 8000,
+    });
+
+    const finalUrl = res.request?.res?.responseUrl || inputUrl;
+
+    // ✅ /place/2098086907 형태에서 placeId 추출 (v5/entry든 p/entry든 공통)
+    const match = finalUrl.match(/\/place\/(\d+)/);
+    const placeId = match ? match[1] : null;
+
+    // ✅ 정본 URL
+    const canonicalUrl = placeId
+      ? `https://map.naver.com/p/entry/place/${placeId}`
+      : finalUrl;
+
+    return { inputUrl, finalUrl, placeId, canonicalUrl };
+  } catch (e) {
+    return { inputUrl, finalUrl: inputUrl, placeId: null, canonicalUrl: inputUrl };
   }
 };
 
@@ -192,7 +218,7 @@ app.get("/api/diagnosis/instagram", diagnosisLimiter, async (req, res) => {
     const $ = cheerio.load(html);
     const meta = $('meta[property="og:description"]').attr("content");
     const match = meta?.match(/([0-9.,km]+)\s*Followers?,\s*([0-9.,km]+)\s*Following,\s*([0-9.,km]+)\s*Posts?/i);
-    if (!match) throw new Error();
+    if (!match) throw new Error("PARSE_FAILED");
 
     const data = {
       followers: parseIgNumber(match[1]),
@@ -208,24 +234,43 @@ app.get("/api/diagnosis/instagram", diagnosisLimiter, async (req, res) => {
 });
 
 // --------------------
-// Naver Place Diagnosis
+// Naver Place Diagnosis (✅ naver.me -> p/entry 정규화)
 // --------------------
 app.post("/api/diagnosis/naver-place", naverPlaceLimiter, async (req, res) => {
   const { url } = req.body;
-  if (!url) return res.status(400).json({ ok: false });
 
-  let resolvedUrl = url;
+  if (!url || (!url.includes("naver.me") && !url.includes("naver.com"))) {
+    return res.status(400).json({
+      ok: false,
+      error: "INVALID_URL",
+      message: "올바른 네이버 플레이스 링크(naver.me 또는 map.naver.com)를 입력해주세요.",
+    });
+  }
+
+  let resolved = null;
+
   try {
-    if (url.includes("naver.me")) resolvedUrl = await resolveNaverUrl(url);
+    // ✅ 1) 정규화 (naver.me → finalUrl → placeId → canonicalUrl)
+    resolved = await resolveNaverPlaceUrl(url);
 
-    const cacheKey = `np_${Buffer.from(resolvedUrl).toString("base64")}`;
+    // ✅ 2) 캐시 키: placeId가 있으면 그걸로 고정 (제일 안정적)
+    const cacheKey = resolved.placeId
+      ? `np_id_${resolved.placeId}`
+      : `np_url_${Buffer.from(resolved.canonicalUrl).toString("base64")}`;
+
     const cached = diagnosisCache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    const scraped = await withTimeout(scrapeNaverPlace(resolvedUrl), 55000);
+    // ✅ 3) 스크래핑은 canonicalUrl로 (네가 원하는 형태)
+    const scraped = await withTimeout(scrapeNaverPlace(resolved.canonicalUrl), 55000);
     const analysis = calculateNaverScore(scraped);
 
     const response = {
+      ok: true,
+      inputUrl: url,
+      finalUrl: resolved.finalUrl,
+      canonicalUrl: resolved.canonicalUrl,
+      placeId: resolved.placeId,
       placeName: scraped.placeName,
       metrics: scraped,
       score: analysis.score,
@@ -236,10 +281,23 @@ app.post("/api/diagnosis/naver-place", naverPlaceLimiter, async (req, res) => {
     diagnosisCache.set(cacheKey, response);
     res.json(response);
   } catch (e) {
-    if (String(e.message).startsWith("TIMEOUT")) {
-      return res.status(504).json({ ok: false, error: "TIMEOUT" });
+    const msg = String(e?.message || e);
+
+    if (msg.startsWith("TIMEOUT_") || msg.startsWith("TIMEOUT")) {
+      return res.status(504).json({
+        ok: false,
+        error: "TIMEOUT",
+        message: "네이버 페이지 응답이 지연되어 분석이 중단되었습니다.",
+        debug: { message: msg, resolved },
+      });
     }
-    res.status(500).json({ ok: false, error: "SCRAPE_FAILED" });
+
+    return res.status(500).json({
+      ok: false,
+      error: "SCRAPE_FAILED",
+      message: "페이지 정보를 수집하는데 실패했습니다.",
+      debug: { message: msg, resolved },
+    });
   }
 });
 
@@ -247,13 +305,14 @@ app.post("/api/diagnosis/naver-place", naverPlaceLimiter, async (req, res) => {
 // Health & Version
 // --------------------
 app.get("/api/health", (req, res) => res.json({ ok: true }));
-app.get("/api/version", (req, res) => res.json({ ok: true, version: "stable-v1" }));
+app.get("/api/version", (req, res) => res.json({ ok: true, version: "stable-v2-p-entry" }));
 
 // --------------------
 // Runtime Config
 // --------------------
 app.get("/runtime-config.js", (req, res) => {
   res.type("application/javascript");
+  res.setHeader("Cache-Control", "no-store");
   res.send(`window.__RUNTIME_CONFIG__ = { API_BASE_URL: "${process.env.API_URL || ""}" };`);
 });
 
