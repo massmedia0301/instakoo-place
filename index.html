@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
@@ -10,7 +10,7 @@
     <!-- Mobile Browser Theme Color -->
     <meta name="theme-color" content="#FF5FA2" />
 
-    <!-- Custom Favicon (Pink Rounded Square with 'in') - Added padding to prevent clipping -->
+    <!-- Custom Favicon (Pink Rounded Square with 'in') -->
     <link
       rel="icon"
       type="image/svg+xml"
@@ -22,174 +22,54 @@
     />
     <link
       rel="apple-touch-icon"
-      href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjMwIiBmaWxsPSIjRkY1RkEyIi8+PHRleHQgeD0iNDgiIHk9IjcwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjkwMCIgZm9udC1zdHlsZT0iaXRhbGljIiBmb250LXNpemU9IjU1IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+aW48L3RleHQtYW5jaG9yPSJtaWRkbGUiPmluPC90ZXh0Pjwvc3ZnPg=="
+      href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjMwIiBmaWxsPSIjRkY1RkEyIi8+PHRleHQgeD0iNDgiIHk9IjcwIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjkwMCIgZm9udC1zdHlsZT0iaXRhbGljIiBmb250LXNpemU9IjU1IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+aW48L3RleHQ+PC9zdmc+"
     />
 
-    <!-- Open Graph for Link Previews -->
+    <!-- Open Graph -->
     <meta property="og:title" content="instakoo | 인스타쿠 - SNS 마케팅 자동화" />
     <meta
       property="og:description"
       content="인스타그램, 유튜브, 네이버, 당근마켓 마케팅 자동화 플랫폼. 지금 가입하고 포인트를 받아보세요!"
     />
-    <meta property="og:image" content="https://cdn-icons-png.flaticon.com/512/3955/3955024.png" />
+    <meta
+      property="og:image"
+      content="https://cdn-icons-png.flaticon.com/512/3955/3955024.png"
+    />
     <meta property="og:url" content="https://instakoo.shop" />
     <meta property="og:type" content="website" />
 
     <title>instakoo | 인스타쿠 - SNS 마케팅 자동화</title>
 
-    <!-- ✅ importmap: 반드시 module보다 먼저, 그리고 '한 번만' -->
-    <script type="importmap">
-      {
-        "imports": {
-          "react": "https://esm.sh/react@^19.2.3",
-          "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-          "react/": "https://esm.sh/react@^19.2.3/",
-          "vite": "https://esm.sh/vite@^7.2.7",
-          "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-          "firebase/": "https://esm.sh/firebase@^12.6.0/",
-          "path": "https://esm.sh/path@^0.12.7",
-          "cors": "https://esm.sh/cors@^2.8.5",
-          "express": "https://esm.sh/express@^5.2.1",
-          "url": "https://esm.sh/url@^0.11.4",
-          "express-rate-limit": "https://esm.sh/express-rate-limit@^8.2.1",
-          "cheerio": "https://esm.sh/cheerio@^1.1.2",
-          "body-parser": "https://esm.sh/body-parser@^2.2.1",
-          "dotenv": "https://esm.sh/dotenv@^17.2.3",
-          "node-cache": "https://esm.sh/node-cache@^5.1.2",
-          "axios": "https://esm.sh/axios@^1.13.2",
-          "playwright": "https://esm.sh/playwright@^1.57.0"
-        }
-      }
-    </script>
+    <!-- ✅ 런타임 설정은 서버에서 내려받아서 window.__RUNTIME_CONFIG__로 사용 -->
+    <script src="/runtime-config.js"></script>
 
-    <!-- Runtime Configuration Loader -->
-    <script type="module" src="/runtime-config.js"></script>
-
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ✅ 외부 CSS는 유지 가능 (폰트/아이콘) -->
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
       rel="stylesheet"
     />
     <script src="https://cdn.iamport.kr/v1/iamport.js"></script>
 
+    <!-- ✅ Pretendard 유지 -->
     <style>
       @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
 
       html {
         font-size: 15.2px;
       }
-
       body {
         font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue",
           "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji",
           "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
         background-color: #fff0f7;
       }
-
-      .hide-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .hide-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-
-      @keyframes marquee {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-50%); }
-      }
-      .animate-marquee {
-        display: flex;
-        width: max-content;
-        animation: marquee 60s linear infinite;
-      }
-      .animate-marquee:hover {
-        animation-play-state: paused;
-      }
-
-      @keyframes vertical-marquee {
-        0% { transform: translateY(0); }
-        100% { transform: translateY(-50%); }
-      }
-      .animate-vertical-marquee {
-        animation: vertical-marquee 40s linear infinite;
-      }
-
-      @keyframes shake {
-        0% { transform: translate(1px, 1px) rotate(0deg); }
-        10% { transform: translate(-1px, -2px) rotate(-1deg); }
-        20% { transform: translate(-3px, 0px) rotate(1deg); }
-        30% { transform: translate(3px, 2px) rotate(0deg); }
-        40% { transform: translate(1px, -1px) rotate(1deg); }
-        50% { transform: translate(-1px, 2px) rotate(-1deg); }
-        60% { transform: translate(-3px, 1px) rotate(0deg); }
-        70% { transform: translate(3px, 1px) rotate(-1deg); }
-        80% { transform: translate(-1px, -1px) rotate(1deg); }
-        90% { transform: translate(1px, 2px) rotate(0deg); }
-        100% { transform: translate(1px, -2px) rotate(-1deg); }
-      }
-      .animate-shake {
-        animation: shake 0.5s infinite;
-      }
-
-      @keyframes pop-open {
-        0% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.1); opacity: 0.8; }
-        100% { transform: scale(1.5); opacity: 0; }
-      }
-      .animate-pop {
-        animation: pop-open 0.5s forwards;
-      }
-
-      @keyframes shimmer {
-        0% { left: -100%; opacity: 0; }
-        50% { opacity: 0.5; }
-        100% { left: 200%; opacity: 0; }
-      }
-      .animate-shimmer {
-        position: absolute;
-        top: 0;
-        width: 50%;
-        height: 100%;
-        background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.6), transparent);
-        transform: skewX(-20deg);
-        animation: shimmer 3s infinite ease-in-out;
-        pointer-events: none;
-      }
     </style>
-
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              primary: "#FF5FA2",
-              primaryLight: "#FF88C6",
-              primaryBg: "#FFF0F7",
-              accent: "#355CFF",
-              dark: "#222222",
-              grayText: "#666666"
-            },
-            fontFamily: {
-              sans: ["Pretendard", "sans-serif"]
-            },
-            animation: {
-              "bounce-in": "bounce-in 0.5s ease-out"
-            },
-            keyframes: {
-              "bounce-in": {
-                "0%": { transform: "scale(0.8)", opacity: "0" },
-                "100%": { transform: "scale(1)", opacity: "1" }
-              }
-            }
-          }
-        }
-      };
-    </script>
   </head>
 
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+
+    <!-- ✅ Vite 표준 엔트리 (중요) -->
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

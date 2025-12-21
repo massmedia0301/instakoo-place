@@ -1,6 +1,6 @@
 /**
  * instakoo Backend Server
- * Monolith Deployment for Cloud Run (Express serving React Static Files)
+ * Monolith Deployment for Cloud Run (Express serving Vite dist)
  */
 
 import express from "express";
@@ -11,6 +11,7 @@ import rateLimit from "express-rate-limit";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { chromium } from "playwright";
 import dotenv from "dotenv";
@@ -24,8 +25,13 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// dist path (monolith: server/ 아래에서 ../dist)
-const DIST_DIR = path.join(__dirname, "../dist");
+/**
+ * ✅ dist 경로를 "실행 위치"에 흔들리지 않게 고정
+ * - Dockerfile: WORKDIR /app
+ * - Vite build output: /app/dist
+ */
+const DIST_DIR = path.resolve(process.cwd(), "dist");
+const DIST_INDEX = path.join(DIST_DIR, "index.html");
 
 // --------------------
 // Middlewares
@@ -54,8 +60,17 @@ const naverPlaceLimiter = rateLimit({
 });
 
 // --------------------
-// Utils
+// Startup Debug (중요)
 // --------------------
+console.log("[BOOT] cwd =", process.cwd());
+console.log("[BOOT] __dirname =", __dirname);
+console.log("[BOOT] DIST_DIR =", DIST_DIR);
+console.log("[BOOT] dist exists =", fs.existsSync(DIST_DIR));
+console.log("[BOOT] index exists =", fs.existsSync(DIST_INDEX));
+
+/* =====================
+   Utils
+===================== */
 const parseIgNumber = (str) => {
   if (!str) return 0;
   let clean = String(str).replace(/,/g, "").replace(/\s/g, "").toLowerCase();
@@ -323,39 +338,32 @@ const calculateNaverScore = (data) => {
 };
 
 /* ============================================================
-   ✅ Static files / runtime-config BEFORE SPA fallback
+   ✅ runtime-config / APIs / static / SPA fallback 순서 고정
    ============================================================ */
 
-// runtime-config.js는 반드시 SPA fallback보다 먼저!
+// 1) runtime-config.js (반드시 fallback보다 먼저)
 app.get("/runtime-config.js", (req, res) => {
   res.type("application/javascript");
   res.setHeader("Cache-Control", "no-store");
+  // 프론트에서 window.__RUNTIME_CONFIG__ 사용하도록 통일
   res.send(
     `window.__RUNTIME_CONFIG__ = { API_BASE_URL: "${process.env.API_URL || ""}" };`
   );
 });
 
-// 정적파일 서빙 (assets가 HTML로 떨어지는 걸 방지)
-app.use(
-  express.static(DIST_DIR, {
-    index: false, // index.html은 SPA fallback에서 처리
-    maxAge: "1h",
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith(".js")) res.type("application/javascript");
-      if (filePath.endsWith(".mjs")) res.type("application/javascript");
-      if (filePath.endsWith(".css")) res.type("text/css");
-    },
-  })
-);
-
 /* =====================
-   APIs
+   APIs (정적 서빙보다 먼저 두면 안전)
 ===================== */
 
-// Health & Version (먼저)
+// Health & Version
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.get("/api/version", (req, res) =>
-  res.json({ ok: true, version: "LOCAL-FINAL-TYPE-AWARE-V5" })
+  res.json({
+    ok: true,
+    version: process.env.K_REVISION || "unknown-revision",
+    distDir: DIST_DIR,
+    distIndexExists: fs.existsSync(DIST_INDEX),
+  })
 );
 
 // Instagram
@@ -496,24 +504,61 @@ app.post("/api/diagnosis/naver-place", naverPlaceLimiter, async (req, res) => {
 });
 
 /* =====================
+   Static files (dist)
+   - assets는 long cache
+   - index.html은 no-store (캐시 때문에 옛 HTML이 고정되는 현상 방지)
+===================== */
+
+app.use(
+  express.static(DIST_DIR, {
+    index: false,
+    fallthrough: true,
+    maxAge: "1h",
+    setHeaders: (res, filePath) => {
+      const fp = String(filePath || "");
+
+      // index.html은 절대 캐시 금지
+      if (fp.endsWith("index.html")) {
+        res.setHeader("Cache-Control", "no-store");
+      }
+
+      // Vite assets는 캐시해도 OK (해시 파일명)
+      if (fp.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      }
+
+      if (fp.endsWith(".js") || fp.endsWith(".mjs"))
+        res.type("application/javascript");
+      if (fp.endsWith(".css")) res.type("text/css");
+    },
+  })
+);
+
+/* =====================
    SPA fallback (LAST)
    ✅ 확장자 있는 요청은 fallback으로 보내지 말 것!
 ===================== */
 
 app.get("*", (req, res) => {
-  // ✅ 1) /api는 여기까지 오면 이상하니 404
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ ok: false, error: "NOT_FOUND" });
   }
 
-  // ✅ 2) ".확장자"가 있는 요청은 index.html로 보내면 MIME 에러 폭발함
-  //    예: /index.tsx, /main.tsx, /assets/app.js, /something.css ...
+  // 확장자 요청은 404 (MIME/TSX 직접 로딩 방지)
   if (req.path.includes(".")) {
     return res.status(404).send("Not Found");
   }
 
-  // ✅ 3) 그 외 SPA 라우팅만 index.html
-  return res.sendFile(path.join(DIST_DIR, "index.html"));
+  // dist/index.html이 없으면 바로 원인 노출
+  if (!fs.existsSync(DIST_INDEX)) {
+    return res.status(500).send(
+      `dist/index.html not found. DIST_DIR=${DIST_DIR}\n` +
+      `cwd=${process.cwd()}\n`
+    );
+  }
+
+  res.setHeader("Cache-Control", "no-store");
+  return res.sendFile(DIST_INDEX);
 });
 
 app.listen(PORT, () => {
